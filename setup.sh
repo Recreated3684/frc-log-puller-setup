@@ -26,7 +26,15 @@ if [ -z "$CONN" ]; then
   exit 1
 fi
 
-#--- 3. Apply static IP via NetworkManager ---
+#--- 3. Create DHCP fallback profile ---
+BACKUP_CONN="${CONN}-dhcp-fallback"
+if ! nmcli connection show "$BACKUP_CONN" &>/dev/null; then
+  echo "Creating DHCP fallback profile: $BACKUP_CONN"
+  nmcli connection clone "$CONN" "$BACKUP_CONN"
+  nmcli connection modify "$BACKUP_CONN" ipv4.method auto connection.autoconnect yes
+fi
+
+#--- 4. Apply static IP via NetworkManager on primary profile ---
 nmcli connection modify "$CONN" \
   ipv4.method manual \
   ipv4.addresses "${IP}/${NETMASK}" \
@@ -36,15 +44,15 @@ nmcli connection modify "$CONN" \
 
 nmcli connection down "$CONN" && nmcli connection up "$CONN"
 
-echo "Static IP set and connection restarted."
+echo "Static IP set and connection restarted. Fallback DHCP profile remains enabled."
 
-#--- 4. Install system dependencies ---
+#--- 5. Install system dependencies ---
 echo
 echo "Updating package lists and installing dependencies..."
 apt update
 apt install -y git python3 python3-pip
 
-#--- 5. Clone or update the log-puller repo ---
+#--- 6. Clone or update the log-puller repo ---
 REPO_URL="https://github.com/your-org/frc-log-puller.git"
 TARGET_DIR="frc-log-puller"
 if [ ! -d "$TARGET_DIR" ]; then
@@ -57,7 +65,7 @@ else
   cd ..
 fi
 
-#--- 6. Create systemd service for auto-start ---
+#--- 7. Create systemd service for auto-start ---
 SERVICE_NAME="frc-log-puller"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 WORK_DIR="$(pwd)/${TARGET_DIR}"
