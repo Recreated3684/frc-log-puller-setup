@@ -7,6 +7,18 @@ set -e
 # Usage: curl -sSL <URL-to-this-script> | bash
 # -------------------------------------------
 
+# If script is piped, reattach STDIN to /dev/tty for interactive prompts
+if [ ! -t 0 ]; then
+  exec < /dev/tty
+fi
+
+# Ensure NetworkManager is installed for nmcli
+if ! command -v nmcli > /dev/null; then
+  echo "Installing NetworkManager..."
+  apt update
+  apt install -y network-manager
+fi
+
 #--- 1. Ask for team number and compute IPs ---
 read -p "Enter your FRC team number (e.g. 6328): " TEAM
 TE=$(( TEAM / 100 ))
@@ -16,7 +28,7 @@ GATEWAY="10.${TE}.${AM}.1"
 NETMASK="24"
 
 echo
-echo "Configuring Ethernet static IP to ${IP}/${NETMASK} with gateway ${GATEWAY}"
+printf "Configuring Ethernet static IP to %s/%s with gateway %s\n" "$IP" "$NETMASK" "$GATEWAY"
 
 #--- 2. Identify active Ethernet connection profile ---
 CONN=$(nmcli -t -f NAME,TYPE connection show --active | grep ":ethernet" | cut -d: -f1 | head -n1)
@@ -34,7 +46,7 @@ if ! nmcli connection show "$BACKUP_CONN" &>/dev/null; then
   nmcli connection modify "$BACKUP_CONN" ipv4.method auto connection.autoconnect yes
 fi
 
-#--- 4. Apply static IP via NetworkManager on primary profile ---
+#--- 4. Apply static IP on primary profile ---
 nmcli connection modify "$CONN" \
   ipv4.method manual \
   ipv4.addresses "${IP}/${NETMASK}" \
@@ -48,7 +60,7 @@ echo "Static IP set and connection restarted. Fallback DHCP profile remains enab
 
 #--- 5. Install system dependencies ---
 echo
-echo "Updating package lists and installing dependencies..."
+printf "Updating package lists and installing dependencies...\n"
 apt update
 apt install -y git python3 python3-pip
 
@@ -70,7 +82,7 @@ SERVICE_NAME="frc-log-puller"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 WORK_DIR="$(pwd)/${TARGET_DIR}"
 
-echo "Creating systemd service: ${SERVICE_NAME}" 
+echo "Creating systemd service: ${SERVICE_NAME}"
 cat <<EOF > "$SERVICE_FILE"
 [Unit]
 Description=FRC Log Puller Service
@@ -94,7 +106,4 @@ systemctl enable "$SERVICE_NAME"
 systemctl start "$SERVICE_NAME"
 
 echo
-echo "Setup complete!"
-echo "- Static IP: ${IP}" 
-echo "- Log puller repo: ${WORK_DIR}" 
-echo "- Service: ${SERVICE_NAME} running"
+printf "Setup complete!\n- Static IP: %s\n- Log puller repo: %s\n- Service: %s running\n" "$IP" "$WORK_DIR" "$SERVICE_NAME"
